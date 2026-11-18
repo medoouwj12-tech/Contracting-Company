@@ -82,7 +82,10 @@ create policy "appointments assigned" on appointments for all using(can_view_rec
 create policy "comments scoped read" on comments for select using((property_id is not null and exists(select 1 from properties p where p.id=property_id and can_view_record(p.assigned_to))) or (client_id is not null and exists(select 1 from clients c where c.id=client_id and can_view_record(c.assigned_to))));
 create policy "comments scoped write" on comments for insert with check(auth.uid()=created_by);
 create policy "favorites owner" on favorites for all using(user_id=auth.uid()) with check(user_id=auth.uid());
-create policy "ads scoped" on ads for all using(exists(select 1 from properties p where p.id=property_id and can_view_record(p.assigned_to))) with check(exists(select 1 from properties p where p.id=property_id and can_view_record(p.assigned_to)));
+create policy "ads scoped read" on ads for select using(exists(select 1 from properties p where p.id=property_id and can_view_record(p.assigned_to)));
+create policy "ads scoped create" on ads for insert with check(auth.uid()=created_by and has_permission('ads','create') and exists(select 1 from properties p where p.id=property_id and can_view_record(p.assigned_to)));
+create policy "ads scoped update" on ads for update using(has_permission('ads','edit') and exists(select 1 from properties p where p.id=property_id and can_view_record(p.assigned_to))) with check(exists(select 1 from properties p where p.id=property_id and can_view_record(p.assigned_to)));
+create policy "ads scoped delete" on ads for delete using(has_permission('ads','delete'));
 create policy "audit admins read" on audit_logs for select using(current_app_role() in ('super_admin','manager'));
 create policy "notifications owner" on notifications for all using(user_id=auth.uid()) with check(user_id=auth.uid());
 create policy "saved filters owner or shared" on saved_filters for select using(user_id=auth.uid() or is_shared);
@@ -282,3 +285,33 @@ end;
 $$;
 revoke all on function public.archive_property(uuid) from public,anon;
 grant execute on function public.archive_property(uuid) to authenticated;
+
+create or replace function public.create_custom_role(p_name text,p_name_ar text)
+returns uuid language plpgsql security definer set search_path=public,pg_temp as $$
+declare new_role_id uuid;
+begin
+  if auth.uid() is null or public.current_app_role()<>'super_admin' then raise exception 'Only Super Admin can manage roles'; end if;
+  if nullif(trim(p_name),'') is null or nullif(trim(p_name_ar),'') is null then raise exception 'Role names are required'; end if;
+  insert into public.roles(name,name_ar,is_system) values(trim(p_name),trim(p_name_ar),false) returning id into new_role_id;
+  insert into public.role_permissions(role_id,permission_id,allowed) select new_role_id,id,false from public.permissions;
+  insert into public.audit_logs(actor_id,action,entity_type,entity_id,after_data) values(auth.uid(),'create','role',new_role_id::text,jsonb_build_object('name',trim(p_name),'name_ar',trim(p_name_ar)));
+  return new_role_id;
+end;
+$$;
+revoke all on function public.create_custom_role(text,text) from public,anon;
+grant execute on function public.create_custom_role(text,text) to authenticated;
+
+create or replace function public.set_role_permission(p_role_id uuid,p_permission_id uuid,p_allowed boolean)
+returns void language plpgsql security definer set search_path=public,pg_temp as $$
+declare old_allowed boolean;
+begin
+  if auth.uid() is null or public.current_app_role()<>'super_admin' then raise exception 'Only Super Admin can manage roles'; end if;
+  select allowed into old_allowed from public.role_permissions where role_id=p_role_id and permission_id=p_permission_id;
+  insert into public.role_permissions(role_id,permission_id,allowed) values(p_role_id,p_permission_id,p_allowed)
+  on conflict(role_id,permission_id) do update set allowed=excluded.allowed;
+  insert into public.audit_logs(actor_id,action,entity_type,entity_id,before_data,after_data)
+  values(auth.uid(),'permission_update','role_permission',p_role_id::text,jsonb_build_object('permission_id',p_permission_id,'allowed',old_allowed),jsonb_build_object('permission_id',p_permission_id,'allowed',p_allowed));
+end;
+$$;
+revoke all on function public.set_role_permission(uuid,uuid,boolean) from public,anon;
+grant execute on function public.set_role_permission(uuid,uuid,boolean) to authenticated;
