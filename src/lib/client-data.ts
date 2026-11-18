@@ -18,6 +18,11 @@ export async function revealClientContact(id:string,comment:string):Promise<stri
   return ((data??[]) as {phone:string}[]).map(row=>row.phone);
 }
 
+export async function archiveClient(id:string,comment:string){
+  const {error}=await createClient().rpc("archive_client",{p_client_id:id,p_comment:comment});
+  if(error)throw error;
+}
+
 export async function createClientRecord(client:Pick<ClientRecord,"name"|"phones"|"source"|"notes"|"tags">){
   const neon=createClient();
   const {error}=await neon.rpc("create_client_with_phones",{payload:client});
