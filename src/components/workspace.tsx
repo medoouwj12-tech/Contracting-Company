@@ -18,6 +18,8 @@ import { ReportsPage } from "@/components/reports-page";
 import { SettingsPage } from "@/components/settings-page";
 import { AdsPage } from "@/components/ads-page";
 import { createAd, fetchAds, updateAdStatus, type AdRecord } from "@/lib/ads-data";
+import { runPropertyImport, type DuplicateStrategy, type ImportProgress, type ImportResult } from "@/lib/import-data";
+import type { StagedProperty } from "@/lib/import-utils";
 
 type Section = "الرئيسية"|"العقارات"|"العملاء"|"المتابعات"|"الإعلانات"|"التقارير"|"الأدوار والصلاحيات"|"الإعدادات";
 const navigation: {name:Section;icon:typeof Home;badge?:string}[] = [{name:"الرئيسية",icon:LayoutDashboard},{name:"العقارات",icon:Building2,badge:"248"},{name:"العملاء",icon:Users},{name:"المتابعات",icon:CalendarDays,badge:"5"},{name:"الإعلانات",icon:ArrowUpFromLine},{name:"التقارير",icon:Activity},{name:"الأدوار والصلاحيات",icon:ShieldCheck}];
@@ -40,7 +42,7 @@ export function Workspace(){
  useEffect(()=>{document.documentElement.classList.toggle("dark",dark)},[dark]);
  const showToast=(v:string)=>{setToast(v);window.setTimeout(()=>setToast(""),2600)};
  const visible=useMemo(()=>properties.filter(p=>{const needle=search.trim().toLowerCase();const matches=!needle||[p.code,p.client,p.area,p.type,p.block,p.plot,...p.phones].join(" ").toLowerCase().includes(needle);return matches&&(filter==="الكل"||p.status===(filter==="متاح"?"available":filter==="مباع"?"sold":"lost"))}),[properties,search,filter]);
- const addImported=(rows:Property[])=>{if(remote){showToast("الاستيراد الدائم يحتاج إلى تشغيل عامل الاستيراد في الخادم");return}setProperties(old=>[...rows,...old]);showToast(`تم استيراد ${rows.length} عقار بنجاح`)};
+ const addImported=async(fileName:string,rows:StagedProperty[],strategy:DuplicateStrategy,onProgress:(progress:ImportProgress)=>void):Promise<ImportResult>=>{if(remote){const result=await runPropertyImport(fileName,rows,strategy,onProgress);setProperties(await fetchProperties());showToast(`اكتمل الاستيراد: ${result.created} عقار`);return result}const validRows=rows.filter(row=>row.errors.length===0);setProperties(old=>[...validRows.map(row=>row.property),...old].slice(0,5000));const result={batchId:null,created:validRows.length,updated:0,skipped:rows.filter(row=>row.errors.length>0).length,failed:0};onProgress({phase:"processing",done:rows.length,total:rows.length,created:result.created,skipped:result.skipped,failed:result.failed});showToast(`تم استيراد ${result.created} عقار في هذه المعاينة`);return result};
  const saveProperty=async(property:Property)=>{if(remote){try{await createProperty(property);setProperties(await fetchProperties());setAddOpen(false);showToast(`تم حفظ العقار ${property.code}`)}catch{showToast("تعذر الحفظ. تحقق من صلاحيات الحساب وتطبيق ترحيل Supabase.")};return}setProperties(old=>[property,...old]);setAddOpen(false);showToast(`تم حفظ العقار ${property.code}`)};
  const saveClient=async(client:ClientRecord)=>{if(remote){try{await createClientRecord(client);setClients(await fetchClients());showToast("تم حفظ ملف العميل")}catch{showToast("تعذر الحفظ. تحقق من تكرار الهاتف وصلاحيات الحساب.")};return}setClients(old=>[client,...old]);showToast("تم حفظ ملف العميل")};
  const saveFollowUp=async(record:Omit<FollowUp,"id"|"completed">)=>{if(remote){try{await createFollowUp(record);setFollowUps(await fetchFollowUps());showToast("تمت إضافة المتابعة")}catch{showToast("تعذر إضافة المتابعة. تحقق من صلاحيات الحساب.")};return}setFollowUps(old=>[{...record,id:crypto.randomUUID(),completed:false},...old]);showToast("تمت إضافة المتابعة")};

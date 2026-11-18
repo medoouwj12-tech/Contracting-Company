@@ -11,7 +11,7 @@ Arabic-first real estate and client management workspace for a Kuwait contractin
 - Supabase Postgres migration for normalized records, coded lookups, roles and permissions, audit history, import staging tables, search indexes, and row level security.
 - Security headers and environment-based Supabase client helpers.
 
-The included browser preview is not a substitute for a configured Supabase deployment. Data entered without Supabase is stored in the current browser only. The import UI currently writes validated property rows into that local preview; in connected mode, durable import is not yet enabled. The migration defines the durable backend and staging model; a production background worker/Edge Function, transactional batch processor and rollback endpoint still need to be connected before importing a company's live 50k+ dataset. Do not use the local preview for production records.
+The included browser preview is not a substitute for a configured Supabase deployment. Data entered without Supabase is stored in the current browser only. The local preview is browser-only and capped for demonstration; do not use it for company production records. Connected imports stage rows in Supabase and process them transactionally in batches of up to 500. Duplicate property codes can be skipped, updated with a saved prior snapshot, or imported as a separate record with a generated suffix. Managers can roll back a batch within 30 days.
 
 ## Requirements
 
@@ -31,7 +31,7 @@ Set `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` in `.env.loca
 ## Database and deployment
 
 1. Create a Supabase project in a region suitable for your Kuwait users.
-2. Apply `supabase/migrations/202611180001_initial_schema.sql` through the Supabase SQL editor or Supabase CLI migration workflow.
+2. For a new project, apply both files in `supabase/migrations` in filename order. For a database that already applied the initial schema, apply `202611180002_import_duplicate_strategy.sql`. Use Supabase CLI migration tracking for repeatable deployments.
 3. Enable email/password auth and configure your production site URL and redirect URLs in Supabase Auth.
 4. Register the first user, then promote that account in the Supabase SQL editor:
 
@@ -52,7 +52,7 @@ The migration seeds Super Admin, Manager, Sales Agent, Call Center, Data Entry, 
 
 ## Import pipeline notes
 
-The browser parser accepts `.xlsx`, `.xls`, and `.csv`, rejects `.xlsm`, and supports UTF-8 plus Windows-1256 CSV decoding. Its current import wizard is a preview/local demonstration. The schema includes `import_batches`, `import_rows`, `import_mappings`, and `value_mappings` to support resumable server-side batches. Before importing live workbooks, implement an authenticated Edge Function or queue worker that validates staged rows in batches, performs each batch transactionally, checks duplicates, records before/after state, emits progress, and supports 30-day rollback. Store the original workbook in private Storage. Test that pipeline against a representative messy 50k+ workbook in a staging project.
+The browser parser accepts `.xlsx`, `.xls`, and `.csv`, rejects `.xlsm`, and supports UTF-8 plus Windows-1256 CSV decoding. Connected imports stage mapped rows in `import_batches` and `import_rows`, then process rows through authenticated, permission-checked PostgreSQL RPCs in batches of up to 500. Row status and batch totals are stored for audit and resume; duplicate code policies are skip, update with before-state, or create with a generated code suffix. A manager or super admin can roll back created and updated property records for 30 days. The original workbook is not yet stored in private Storage. The synthetic parser test covers 50,250 rows, but the RPC pipeline still requires validation against a configured staging Supabase project before production use.
 
 ## Scripts
 
