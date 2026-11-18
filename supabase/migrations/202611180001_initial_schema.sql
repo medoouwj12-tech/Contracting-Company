@@ -115,3 +115,170 @@ begin
  return new;
 end $$;
 create trigger auth_user_profile_bootstrap after insert on auth.users for each row execute function public.bootstrap_profile();
+
+-- Transactional property creation helper used by the authenticated app.
+create or replace function public.create_property_with_client(payload jsonb)
+returns uuid language plpgsql security definer set search_path=public,pg_temp as $$
+declare
+  actor_id uuid := auth.uid();
+  client_record_id uuid;
+  client_owner_id uuid;
+  property_record_id uuid;
+  assigned_record_id uuid;
+  type_record_id uuid;
+  offer_record_id uuid;
+  area_record_id uuid;
+  location_record_id uuid;
+  phone_value text;
+  phone_normalized text;
+begin
+  if actor_id is null or not public.has_permission('properties','create') or not public.has_permission('clients','create') then
+    raise exception 'Insufficient permission to create a property';
+  end if;
+  if nullif(trim(payload->>'code'),'') is null or nullif(trim(payload->>'client'),'') is null then
+    raise exception 'Property code and client name are required';
+  end if;
+
+  assigned_record_id := actor_id;
+  if nullif(payload->>'employee','') is not null and payload->>'employee' <> 'غير معيّن' then
+    select id into assigned_record_id from public.profiles where full_name=payload->>'employee' and is_active limit 1;
+    if assigned_record_id is null then raise exception 'Assigned employee was not found'; end if;
+    if assigned_record_id <> actor_id and (not public.has_permission('properties','assign') or not public.can_view_record(assigned_record_id)) then
+      raise exception 'Insufficient permission to assign this property';
+    end if;
+  end if;
+
+  select id into type_record_id from public.lookups where type='property_type' and name_ar=payload->>'type' and is_active;
+  select id into offer_record_id from public.lookups where type='offer_type' and name_ar=payload->>'offer' and is_active;
+  select id into area_record_id from public.lookups where type='area' and name_ar=payload->>'area' and is_active;
+  select id into location_record_id from public.lookups where type='location_type' and name_ar=payload->>'location_type' and is_active;
+
+  for phone_value in select jsonb_array_elements_text(coalesce(payload->'phones','[]'::jsonb)) loop
+    phone_normalized := regexp_replace(phone_value,'\D','','g');
+    if left(phone_normalized,3)='965' then phone_normalized := substring(phone_normalized from 4); end if;
+    select cp.client_id,c.assigned_to into client_record_id,client_owner_id from public.client_phones cp join public.clients c on c.id=cp.client_id where cp.normalized_phone=phone_normalized limit 1;
+    exit when client_record_id is not null;
+  end loop;
+
+  if client_record_id is not null and not public.can_view_record(client_owner_id) then
+    raise exception 'You cannot link a client outside your assigned data scope';
+  end if;
+
+  if client_record_id is null then
+    insert into public.clients(name,assigned_to,created_by)
+    values(trim(payload->>'client'),assigned_record_id,actor_id) returning id into client_record_id;
+  end if;
+  for phone_value in select jsonb_array_elements_text(coalesce(payload->'phones','[]'::jsonb)) loop
+    phone_normalized := regexp_replace(phone_value,'\D','','g');
+    if left(phone_normalized,3)='965' then phone_normalized := substring(phone_normalized from 4); end if;
+    if phone_normalized <> '' then
+      insert into public.client_phones(client_id,phone,normalized_phone,is_primary)
+      values(client_record_id,phone_value,phone_normalized,not exists(select 1 from public.client_phones where client_id=client_record_id))
+      on conflict(client_id,normalized_phone) do nothing;
+    end if;
+  end loop;
+
+  insert into public.properties(code,client_id,type_id,offer_type_id,location_type_id,area_id,block,plot,street,area_m2,asking_price_kwd,details,assigned_to,created_by)
+  values(trim(payload->>'code'),client_record_id,type_record_id,offer_record_id,location_record_id,area_record_id,nullif(payload->>'block',''),nullif(payload->>'plot',''),nullif(payload->>'street',''),nullif(payload->>'size','')::numeric,nullif(payload->>'price','')::numeric,nullif(payload->>'details',''),assigned_record_id,actor_id)
+  returning id into property_record_id;
+
+  for phone_value in select jsonb_array_elements_text(coalesce(payload->'phones','[]'::jsonb)) loop
+    phone_normalized := regexp_replace(phone_value,'\D','','g');
+    if left(phone_normalized,3)='965' then phone_normalized := substring(phone_normalized from 4); end if;
+    if phone_normalized <> '' then
+      insert into public.property_phones(property_id,phone,normalized_phone,position)
+      values(property_record_id,phone_value,phone_normalized,(select count(*)+1 from public.property_phones where property_id=property_record_id))
+      on conflict(property_id,position) do nothing;
+    end if;
+  end loop;
+  return property_record_id;
+end;
+$$;
+revoke all on function public.create_property_with_client(jsonb) from public, anon;
+grant execute on function public.create_property_with_client(jsonb) to authenticated;
+
+create or replace function public.create_client_with_phones(payload jsonb)
+returns uuid language plpgsql security definer set search_path=public,pg_temp as $$
+declare
+  actor_id uuid := auth.uid();
+  client_record_id uuid;
+  phone_value text;
+  phone_normalized text;
+  existing_owner uuid;
+begin
+  if actor_id is null or not public.has_permission('clients','create') then
+    raise exception 'Insufficient permission to create a client';
+  end if;
+  if nullif(trim(payload->>'name'),'') is null then
+    raise exception 'Client name is required';
+  end if;
+
+  for phone_value in select jsonb_array_elements_text(coalesce(payload->'phones','[]'::jsonb)) loop
+    phone_normalized := regexp_replace(phone_value,'\D','','g');
+    if left(phone_normalized,3)='965' then phone_normalized := substring(phone_normalized from 4); end if;
+    if phone_normalized <> '' then
+      select c.id,c.assigned_to into client_record_id,existing_owner
+      from public.client_phones cp join public.clients c on c.id=cp.client_id
+      where cp.normalized_phone=phone_normalized and c.deleted_at is null limit 1;
+      if client_record_id is not null then
+        if public.can_view_record(existing_owner) then raise exception 'A client with this phone already exists';
+        else raise exception 'This phone is already registered'; end if;
+      end if;
+    end if;
+  end loop;
+
+  insert into public.clients(name,source,notes,tags,assigned_to,created_by)
+  values(trim(payload->>'name'),nullif(payload->>'source',''),nullif(payload->>'notes',''),coalesce(array(select jsonb_array_elements_text(payload->'tags')),'{}'),actor_id,actor_id)
+  returning id into client_record_id;
+  for phone_value in select jsonb_array_elements_text(coalesce(payload->'phones','[]'::jsonb)) loop
+    phone_normalized := regexp_replace(phone_value,'\D','','g');
+    if left(phone_normalized,3)='965' then phone_normalized := substring(phone_normalized from 4); end if;
+    if phone_normalized <> '' then
+      insert into public.client_phones(client_id,phone,normalized_phone,is_primary)
+      values(client_record_id,phone_value,phone_normalized,not exists(select 1 from public.client_phones where client_id=client_record_id));
+    end if;
+  end loop;
+  return client_record_id;
+end;
+$$;
+revoke all on function public.create_client_with_phones(jsonb) from public, anon;
+grant execute on function public.create_client_with_phones(jsonb) to authenticated;
+
+-- Price visibility is enforced by a safe view and column grants, not by UI masking.
+create or replace view public.properties_safe with (security_barrier=true) as
+select p.id,p.code,p.client_id,p.type_id,p.offer_type_id,p.location_type_id,p.area_id,p.block,p.plot,p.street,p.avenue,p.floor,p.building_type,p.area_m2,
+  case when exists(select 1 from public.profiles me where me.id=auth.uid() and me.price_visible) then p.asking_price_kwd else null::numeric end as asking_price_kwd,
+  p.details,p.notes,p.assigned_to,p.created_by,p.status,p.entry_date,p.latitude,p.longitude,p.created_at,p.updated_at
+from public.properties p
+where p.deleted_at is null and public.can_view_record(p.assigned_to);
+revoke select on public.properties from anon,authenticated;
+grant select(id,code,client_id,type_id,offer_type_id,location_type_id,area_id,block,plot,street,avenue,floor,building_type,area_m2,details,notes,assigned_to,created_by,status,entry_date,latitude,longitude,created_at,updated_at,deleted_at) on public.properties to authenticated;
+grant select on public.properties_safe to authenticated;
+
+create or replace function public.update_property_status(property_id uuid,new_status public.property_status)
+returns void language plpgsql security definer set search_path=public,pg_temp as $$
+declare owner_id uuid;
+begin
+  select assigned_to into owner_id from public.properties where id=property_id and deleted_at is null;
+  if not found or not public.can_view_record(owner_id) or not public.has_permission('properties','edit') then
+    raise exception 'Insufficient permission to update this property';
+  end if;
+  update public.properties set status=new_status,updated_at=now() where id=property_id;
+end;
+$$;
+revoke all on function public.update_property_status(uuid,public.property_status) from public,anon;
+grant execute on function public.update_property_status(uuid,public.property_status) to authenticated;
+
+create or replace function public.archive_property(property_id uuid)
+returns void language plpgsql security definer set search_path=public,pg_temp as $$
+declare owner_id uuid;
+begin
+  select assigned_to into owner_id from public.properties where id=property_id and deleted_at is null;
+  if not found or not public.can_view_record(owner_id) or not public.has_permission('properties','delete') then
+    raise exception 'Insufficient permission to archive this property';
+  end if;
+  update public.properties set deleted_at=now(),updated_at=now() where id=property_id;
+end;
+$$;
+revoke all on function public.archive_property(uuid) from public,anon;
+grant execute on function public.archive_property(uuid) to authenticated;

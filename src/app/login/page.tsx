@@ -1,0 +1,63 @@
+"use client";
+
+import { FormEvent, useState } from "react";
+import { Building2, Eye, EyeOff, LockKeyhole, Mail, ShieldCheck } from "lucide-react";
+import { createClient } from "@/lib/supabase/client";
+
+export default function LoginPage() {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
+
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setBusy(true); setError(""); setMessage("");
+    try {
+      const supabase = createClient();
+      const { error: authError } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+      if (authError) throw authError;
+      const next = new URLSearchParams(window.location.search).get("next");
+      window.location.assign(next?.startsWith("/") ? next : "/");
+    } catch (e) {
+      setError(e instanceof Error && e.message.includes("Supabase is not configured") ? "لم يتم إعداد الاتصال الآمن بعد. أضف إعدادات Supabase أولاً." : "تعذر تسجيل الدخول. تحقق من البريد الإلكتروني وكلمة المرور.");
+    } finally { setBusy(false); }
+  };
+
+  const forgotPassword = async () => {
+    setError(""); setMessage("");
+    if (!email.trim()) { setError("أدخل بريدك الإلكتروني أولاً لإرسال رابط الاستعادة."); return; }
+    try {
+      const supabase = createClient();
+      const { error: resetError } = await supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo: `${window.location.origin}/login` });
+      if (resetError) throw resetError;
+      setMessage("إذا كان البريد مسجلاً، فسيصلك رابط إعادة تعيين كلمة المرور.");
+    } catch { setError("تعذر إرسال رابط الاستعادة. تحقق من إعدادات البريد في Supabase."); }
+  };
+
+  return <main className="relative grid min-h-screen place-items-center overflow-hidden px-4 py-10">
+    <div className="pointer-events-none absolute -right-24 top-0 h-80 w-80 rounded-full bg-teal-300/20 blur-3xl" />
+    <div className="pointer-events-none absolute -bottom-24 -left-20 h-96 w-96 rounded-full bg-violet-300/20 blur-3xl" />
+    <section className="glass panel relative grid w-full max-w-4xl overflow-hidden md:grid-cols-2">
+      <div className="hidden min-h-[560px] flex-col justify-between bg-gradient-to-br from-[#14273d] via-[#152d42] to-[#245d63] p-10 text-white md:flex">
+        <div className="flex items-center gap-3"><div className="grid h-11 w-11 place-items-center rounded-2xl bg-white/10"><Building2 size={23}/></div><div><b className="text-xl">عقار</b><div className="text-[10px] tracking-[.2em] text-white/55">AQAR · KUWAIT</div></div></div>
+        <div><div className="mb-4 inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-3 py-1.5 text-[10px] text-teal-100"><ShieldCheck size={14}/> مساحة عمل آمنة</div><h1 className="text-3xl font-black leading-[1.55]">كل عقاراتك<br/>وعلاقاتك في مكان واحد.</h1><p className="mt-4 max-w-xs text-sm leading-7 text-white/65">منصة موحدة لفريقك لإدارة العقارات والعملاء والمتابعات بكل سهولة.</p></div>
+        <div className="text-xs text-white/45">حلول ذكية لإدارة العقارات في الكويت</div>
+      </div>
+      <div className="flex flex-col justify-center p-7 sm:p-10">
+        <div className="mb-8 md:hidden"><div className="mx-auto mb-3 grid h-12 w-12 place-items-center rounded-2xl bg-teal-500 text-white"><Building2 size={23}/></div><div className="text-center text-lg font-black">عقار</div></div>
+        <div className="mb-7"><div className="mb-2 text-xs font-bold text-teal-600">مرحباً بعودتك</div><h2 className="text-2xl font-black">تسجيل الدخول</h2><p className="mt-2 text-xs text-slate-400">أدخل بيانات حسابك للوصول إلى مساحة العمل.</p></div>
+        <form onSubmit={submit} className="space-y-4">
+          <label className="block"><span className="mb-1.5 block text-xs font-bold">البريد الإلكتروني</span><span className="relative block"><Mail size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400"/><input required type="email" autoComplete="username" value={email} onChange={e=>setEmail(e.target.value)} placeholder="name@company.com" dir="ltr" className="focus-ring h-11 w-full rounded-xl border border-slate-200/80 bg-white/50 pr-10 pl-3 text-sm outline-none dark:border-slate-700 dark:bg-slate-900/50"/></span></label>
+          <label className="block"><span className="mb-1.5 block text-xs font-bold">كلمة المرور</span><span className="relative block"><LockKeyhole size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400"/><input required minLength={8} type={showPassword?"text":"password"} autoComplete="current-password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="••••••••••" dir="ltr" className="focus-ring h-11 w-full rounded-xl border border-slate-200/80 bg-white/50 pr-10 pl-10 text-sm outline-none dark:border-slate-700 dark:bg-slate-900/50"/><button type="button" aria-label={showPassword?"إخفاء كلمة المرور":"إظهار كلمة المرور"} onClick={()=>setShowPassword(!showPassword)} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">{showPassword?<EyeOff size={16}/>:<Eye size={16}/>}</button></span></label>
+          {error&&<p role="alert" className="rounded-xl bg-rose-50 px-3 py-2.5 text-xs text-rose-700">{error}</p>}{message&&<p role="status" className="rounded-xl bg-emerald-50 px-3 py-2.5 text-xs text-emerald-700">{message}</p>}
+          <button disabled={busy} className="focus-ring h-11 w-full rounded-xl bg-teal-500 text-sm font-bold text-white shadow-lg shadow-teal-500/20 transition hover:bg-teal-600 disabled:opacity-60">{busy?"جارٍ التحقق…":"دخول إلى النظام"}</button>
+        </form>
+        <button type="button" onClick={forgotPassword} className="mt-4 self-center text-xs font-semibold text-teal-700 hover:underline dark:text-teal-300">نسيت كلمة المرور؟</button>
+        <div className="mt-8 border-t border-slate-200/60 pt-5 text-center text-[10px] leading-5 text-slate-400 dark:border-slate-700">الدخول متاح لمستخدمي الشركة المعتمدين فقط.<br/>تواصل مع مدير النظام عند الحاجة إلى مساعدة.</div>
+      </div>
+    </section>
+  </main>;
+}

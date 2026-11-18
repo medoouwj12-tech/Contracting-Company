@@ -5,11 +5,13 @@ Arabic-first real estate and client management workspace for a Kuwait contractin
 ## Current implementation
 
 - Responsive RTL dashboard and property inventory with search, status filters, KWD formatting, CSV export, theme toggle, and browser persistence for a quick local preview.
+- Supabase email/password login, password reset request, protected routes when Supabase is configured, and transactional property creation linked to client contacts.
+- Property detail drawer with status workflow, favorites and archive action; client contact cards with call and WhatsApp actions; follow-up and appointment creation and completion.
 - Excel/CSV import wizard with a dedicated Web Worker, Arabic/English header matching, workbook sheet selection, 50 MB limit, macro-enabled file rejection, Kuwait phone cleanup, Arabic digit conversion, validation counts, and a 20-row preview.
 - Supabase Postgres migration for normalized records, coded lookups, roles and permissions, audit history, import staging tables, search indexes, and row level security.
 - Security headers and environment-based Supabase client helpers.
 
-The included browser preview is not a substitute for a configured Supabase deployment. Data entered without Supabase is stored in the current browser only. The import UI currently writes validated property rows into that local preview. The migration defines the durable backend and staging model; a production background worker/Edge Function, transactional batch processor and rollback endpoint still need to be connected before importing a company's live 50k+ dataset. Do not use the local preview for production records.
+The included browser preview is not a substitute for a configured Supabase deployment. Data entered without Supabase is stored in the current browser only. The import UI currently writes validated property rows into that local preview; in connected mode, durable import is not yet enabled. The migration defines the durable backend and staging model; a production background worker/Edge Function, transactional batch processor and rollback endpoint still need to be connected before importing a company's live 50k+ dataset. Do not use the local preview for production records.
 
 ## Requirements
 
@@ -31,13 +33,22 @@ Set `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` in `.env.loca
 1. Create a Supabase project in a region suitable for your Kuwait users.
 2. Apply `supabase/migrations/202611180001_initial_schema.sql` through the Supabase SQL editor or Supabase CLI migration workflow.
 3. Enable email/password auth and configure your production site URL and redirect URLs in Supabase Auth.
-4. Configure private Storage buckets for property images, documents, and original import files. Add bucket policies aligned with the property assignment scope.
-5. Add the environment variables in Vercel Project Settings, connect the GitHub repository, and deploy. Keep the service role key in server-only runtime configuration.
-6. Create the initial Super Admin profile and assign the `مدير النظام` role using a trusted administrative process.
+4. Register the first user, then promote that account in the Supabase SQL editor:
+
+   ```sql
+   update public.profiles
+   set role_id = (select id from public.roles where name = 'super_admin'),
+       phone_visible = true,
+       price_visible = true
+   where email = 'admin@your-company.com';
+   ```
+
+5. Configure private Storage buckets for property images, documents, and original import files. Add bucket policies aligned with the property assignment scope.
+6. Add the environment variables in Vercel Project Settings, connect the GitHub repository, and deploy. Keep the service role key in server-only runtime configuration.
 
 ## Roles and data access
 
-The migration seeds Super Admin, Manager, Sales Agent, Call Center, Data Entry, Accountant, and Viewer roles plus module/action permissions. Row level security scopes records by assignment and applies permissions in PostgreSQL. Managers and Super Admins have broad access; phone and price visibility flags are represented on profiles for server-side field shaping. Exports must be implemented through a server endpoint that enforces the separate `export` permission and masks restricted fields. Never rely on hiding a UI button as authorization.
+The migration seeds Super Admin, Manager, Sales Agent, Call Center, Data Entry, Accountant, and Viewer roles plus module/action permissions. Row level security scopes records by assignment and applies permissions in PostgreSQL. Managers and Super Admins have broad access. Phone visibility is enforced by RLS; price is exposed through the `properties_safe` view according to the profile's `price_visible` flag, while direct access to the price column is revoked. Exports must be implemented through a server endpoint that enforces the separate `export` permission and masks restricted fields. Never rely on hiding a UI button as authorization.
 
 ## Import pipeline notes
 

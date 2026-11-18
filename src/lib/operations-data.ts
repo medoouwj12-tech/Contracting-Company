@@ -1,0 +1,19 @@
+"use client";
+import { createClient } from "@/lib/supabase/client";
+
+export type FollowUp={id:string;title:string;client:string;property:string;dueAt:string;notes:string;completed:boolean};
+export type Appointment={id:string;title:string;client:string;startsAt:string;location:string;notes:string};
+
+export async function fetchFollowUps():Promise<FollowUp[]>{
+ const db=createClient();const {data,error}=await db.from("follow_ups").select("*").order("due_at").limit(1000);if(error)throw error;
+ const rows=(data??[]) as {id:string;title:string;due_at:string;notes:string|null;completed_at:string|null;client_id:string|null;property_id:string|null}[];
+ const clientIds=rows.flatMap(x=>x.client_id?[x.client_id]:[]),propertyIds=rows.flatMap(x=>x.property_id?[x.property_id]:[]);
+ const [c,p]=await Promise.all([clientIds.length?db.from("clients").select("id,name").in("id",clientIds):Promise.resolve({data:[],error:null}),propertyIds.length?db.from("properties").select("id,code").in("id",propertyIds):Promise.resolve({data:[],error:null})]);
+ if(c.error)throw c.error;if(p.error)throw p.error;const clients=new Map(((c.data??[]) as {id:string;name:string}[]).map(x=>[x.id,x.name]));const props=new Map(((p.data??[]) as {id:string;code:string}[]).map(x=>[x.id,x.code]));
+ return rows.map(x=>({id:x.id,title:x.title,client:x.client_id?clients.get(x.client_id)??"":"",property:x.property_id?props.get(x.property_id)??"":"",dueAt:x.due_at,notes:x.notes??"",completed:Boolean(x.completed_at)}));
+}
+export async function createFollowUp(record:Omit<FollowUp,"id"|"completed">){const db=createClient();const {data:{user},error:userError}=await db.auth.getUser();if(userError||!user)throw userError??new Error("Not signed in");const [{data:client},{data:property}]=await Promise.all([record.client?db.from("clients").select("id").eq("name",record.client).limit(1).maybeSingle():Promise.resolve({data:null}),record.property?db.from("properties").select("id").eq("code",record.property).limit(1).maybeSingle():Promise.resolve({data:null})]);const {error}=await db.from("follow_ups").insert({title:record.title,due_at:record.dueAt,notes:record.notes,client_id:client?.id??null,property_id:property?.id??null,assigned_to:user.id,created_by:user.id});if(error)throw error;}
+export async function completeFollowUp(id:string){const db=createClient();const {error}=await db.from("follow_ups").update({completed_at:new Date().toISOString()}).eq("id",id);if(error)throw error;}
+
+export async function fetchAppointments():Promise<Appointment[]>{const db=createClient();const {data,error}=await db.from("appointments").select("*").order("starts_at").limit(1000);if(error)throw error;const rows=(data??[]) as {id:string;title:string;starts_at:string;location:string|null;notes:string|null;client_id:string|null}[];const ids=rows.flatMap(x=>x.client_id?[x.client_id]:[]);const {data:clients,error:clientError}=ids.length?await db.from("clients").select("id,name").in("id",ids):{data:[],error:null};if(clientError)throw clientError;const names=new Map(((clients??[]) as {id:string;name:string}[]).map(x=>[x.id,x.name]));return rows.map(x=>({id:x.id,title:x.title,startsAt:x.starts_at,location:x.location??"",notes:x.notes??"",client:x.client_id?names.get(x.client_id)??"":""}));}
+export async function createAppointment(record:Omit<Appointment,"id">){const db=createClient();const {data:{user},error:userError}=await db.auth.getUser();if(userError||!user)throw userError??new Error("Not signed in");const {data:client}=record.client?await db.from("clients").select("id").eq("name",record.client).limit(1).maybeSingle():{data:null};const {error}=await db.from("appointments").insert({title:record.title,starts_at:record.startsAt,location:record.location,notes:record.notes,client_id:client?.id??null,assigned_to:user.id,created_by:user.id});if(error)throw error;}
