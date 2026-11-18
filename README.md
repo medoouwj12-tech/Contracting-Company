@@ -1,39 +1,38 @@
 # عقار | Aqar Kuwait
 
-Arabic-first real estate and client management workspace for a Kuwait contracting and property company.
+نظام عربي RTL لإدارة العقارات والعملاء والطلبات والمتابعات لشركة عقارية في الكويت. قاعدة البيانات والمصادقة المستهدفتان هما Neon Postgres وNeon Auth، مع سياسات وصول داخل PostgreSQL.
 
-## Current implementation
+## الموجود في النسخة الحالية
 
-- Responsive RTL dashboard and property inventory with search, status filters, KWD formatting, CSV export, theme toggle, and browser persistence for a quick local preview.
-- Supabase email/password login, password reset request, protected routes when Supabase is configured, and transactional property creation linked to client contacts.
-- Property detail drawer with status workflow, favorites and archive action; client contact cards with call and WhatsApp actions; follow-up and appointment creation and completion.
-- Excel/CSV import wizard with a dedicated Web Worker, Arabic/English header matching, workbook sheet selection, 50 MB limit, macro-enabled file rejection, Kuwait phone cleanup, Arabic digit conversion, validation counts, and a 20-row preview.
-- Supabase Postgres migration for normalized records, coded lookups, roles and permissions, audit history, import staging tables, search indexes, and row level security.
-- Security headers and environment-based Supabase client helpers.
+- لوحة رئيسية، العقارات والعملاء، المواعيد والمتابعات، الإعلانات، التقارير، الإعدادات والأدوار.
+- استيراد Excel وCSV عبر Web Worker، والتحقق من ملف تجريبي يتجاوز 50 ألف صف.
+- استيراد دفعات إلى Neon Data API عبر RPC، بسياسات للتكرار وإمكانية التراجع عن الإنشاءات والتحديثات.
+- جلسات دخول Neon Auth، إنشاء ملف صلاحيات ابتدائي للمستخدم، وحماية جداول PostgreSQL بسياسات RLS.
+- لا يعرض Neon أرقام الهواتف مباشرة؛ يكشفها إجراء مسجل بعد إدخال تعليق، ويحفظ هوية المستخدم ووقت الاطلاع.
+- إعدادات النشر على Vercel وملفات ترحيل قاعدة البيانات في `database/migrations`.
 
-The included browser preview is not a substitute for a configured Supabase deployment. Data entered without Supabase is stored in the current browser only. The local preview is browser-only and capped for demonstration; do not use it for company production records. Connected imports stage rows in Supabase and process them transactionally in batches of up to 500. Duplicate property codes can be skipped, updated with a saved prior snapshot, or imported as a separate record with a generated suffix. Managers can roll back a batch within 30 days.
+هذا ليس بعد نظاماً مكتملاً لكل ما ظهر في فيديو Savvy Realestate. ما زالت تحتاج إلى بناء واختبار التوزيع المشترك للعروض، جلسات العمل والحضور، الرسائل والتعاميم، سلة المحذوفات، مهام الإعلانات والتنبيهات المؤقتة، تقارير سجل الاطلاع، وطباعة بيانات الشركة. كما لم تُختبر قاعدة البيانات على مشروع Neon خاص بالشركة بعد.
 
-## Requirements
+## التشغيل المحلي
 
-- Node.js 20 or newer
-- A Supabase project for hosted authentication and persistence
+المتطلبات: Node.js 20 أو أحدث.
 
-## Local setup
-
-```bash
+```powershell
 npm install
 Copy-Item .env.example .env.local
 npm run dev
 ```
 
-Set `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` in `.env.local`. `SUPABASE_SERVICE_ROLE_KEY` must stay server-side and must never use a `NEXT_PUBLIC_` prefix. The app shell can be viewed without Supabase configuration; Supabase access helpers intentionally fail with a clear configuration message when called without credentials.
+## ربط Neon
 
-## Database and deployment
-
-1. Create a Supabase project in a region suitable for your Kuwait users.
-2. For a new project, apply both files in `supabase/migrations` in filename order. For a database that already applied the initial schema, apply `202611180002_import_duplicate_strategy.sql`. Use Supabase CLI migration tracking for repeatable deployments.
-3. Enable email/password auth and configure your production site URL and redirect URLs in Supabase Auth.
-4. Register the first user, then promote that account in the Supabase SQL editor:
+1. أنشئ مشروعاً وقاعدة بيانات وفرعاً في Neon.
+2. فعّل **Neon Auth** و**Neon Data API** على الفرع وقاعدة البيانات نفسيهما.
+3. انسخ عنوان Neon Auth إلى `NEON_AUTH_BASE_URL` و`NEXT_PUBLIC_NEON_AUTH_URL`.
+4. انسخ عنوان Data API إلى `NEXT_PUBLIC_NEON_DATA_API_URL`.
+5. أنشئ قيمة عشوائية سرية بطول 32 حرفاً أو أكثر وضعها في `NEON_AUTH_COOKIE_SECRET`. هذا متغير خادمي فقط.
+6. ضع اتصال Postgres المباشر في `DATABASE_URL` لتطبيق الترحيلات. لا تضف بادئة `NEXT_PUBLIC_` إلى بيانات الاتصال.
+7. طبّق بالترتيب `database/migrations/001_neon_initial_schema.sql` ثم `database/migrations/002_video_contact_audit.sql` على قاعدة Neon بعد تفعيل Neon Auth؛ الترحيل يربط `profiles.id` بهوية `neon_auth.user.id` ويستخدم `auth.user_id()` في سياسات RLS.
+8. بعد إنشاء المستخدم الأول وتسجيل دخوله، امنحه دور مدير النظام من محرر SQL:
 
    ```sql
    update public.profiles
@@ -43,19 +42,20 @@ Set `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` in `.env.loca
    where email = 'admin@your-company.com';
    ```
 
-5. Configure private Storage buckets for property images, documents, and original import files. Add bucket policies aligned with the property assignment scope.
-6. Add the environment variables in Vercel Project Settings, connect the GitHub repository, and deploy. Keep the service role key in server-only runtime configuration.
+إعداد المصادقة والبريد الإلكتروني، وأصول الصور والمستندات، يتم من خدماتها المخصصة؛ Neon هنا يوفر Postgres وAuth وData API، ولا يحل محل تخزين الملفات.
 
-## Roles and data access
+## الأمان
 
-The migration seeds Super Admin, Manager, Sales Agent, Call Center, Data Entry, Accountant, and Viewer roles plus module/action permissions. Row level security scopes records by assignment and applies permissions in PostgreSQL. Managers and Super Admins have broad access. Phone visibility is enforced by RLS; price is exposed through the `properties_safe` view according to the profile's `price_visible` flag, while direct access to the price column is revoked. Exports must be implemented through a server endpoint that enforces the separate `export` permission and masks restricted fields. Never rely on hiding a UI button as authorization.
+- لا تضع `DATABASE_URL` أو `NEON_AUTH_COOKIE_SECRET` في متغيرات `NEXT_PUBLIC_*`.
+- سياسات الصفوف والصلاحيات موجودة في PostgreSQL، وبيانات المستخدمين في Neon Auth.
+- أول دخول ينشئ ملف مستخدم بدور `viewer`؛ يجب ترقية حساب المدير الأول يدوياً كما في الخطوة السابقة.
+- لا تستخدم وضع المعاينة المحفوظ في المتصفح لبيانات الشركة.
 
-## Import pipeline notes
+## أوامر التحقق
 
-The browser parser accepts `.xlsx`, `.xls`, and `.csv`, rejects `.xlsm`, and supports UTF-8 plus Windows-1256 CSV decoding. Connected imports stage mapped rows in `import_batches` and `import_rows`, then process rows through authenticated, permission-checked PostgreSQL RPCs in batches of up to 500. Row status and batch totals are stored for audit and resume; duplicate code policies are skip, update with before-state, or create with a generated code suffix. A manager or super admin can roll back created and updated property records for 30 days. The original workbook is not yet stored in private Storage. The synthetic parser test covers 50,250 rows, but the RPC pipeline still requires validation against a configured staging Supabase project before production use.
+- `npm run dev` — تشغيل محلي
+- `npm run typecheck` — فحص TypeScript
+- `npm run build` — بناء الإنتاج
+- `npm run test:import` — اختبار محلل ملف Excel التجريبي
 
-## Scripts
-
-- `npm run dev` — local development
-- `npm run build` — production build
-- `npm run typecheck` — TypeScript check
+يتطلب اختبار RPC والصلاحيات قاعدة Neon مهيأة، ومتغيرات الاتصال أعلاه؛ نجاح البناء وحده لا يثبت الربط الحي.

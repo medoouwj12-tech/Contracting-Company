@@ -2,7 +2,7 @@
 
 import { FormEvent, useState } from "react";
 import { Building2, Eye, EyeOff, LockKeyhole, Mail, ShieldCheck } from "lucide-react";
-import { createClient } from "@/lib/supabase/client";
+import { createClient } from "@/lib/neon/client";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -16,13 +16,15 @@ export default function LoginPage() {
     event.preventDefault();
     setBusy(true); setError(""); setMessage("");
     try {
-      const supabase = createClient();
-      const { error: authError } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+      const neon = createClient();
+      const { error: authError } = await neon.auth.signInWithPassword({ email: email.trim(), password });
       if (authError) throw authError;
+      const { error: profileError } = await neon.rpc("bootstrap_current_profile");
+      if (profileError) throw profileError;
       const next = new URLSearchParams(window.location.search).get("next");
       window.location.assign(next?.startsWith("/") ? next : "/");
     } catch (e) {
-      setError(e instanceof Error && e.message.includes("Supabase is not configured") ? "لم يتم إعداد الاتصال الآمن بعد. أضف إعدادات Supabase أولاً." : "تعذر تسجيل الدخول. تحقق من البريد الإلكتروني وكلمة المرور.");
+      setError(e instanceof Error && e.message.includes("Neon is not configured") ? "لم يتم إعداد Neon Auth وData API بعد." : "تعذر تسجيل الدخول. تحقق من البريد الإلكتروني وكلمة المرور وإعداد الحساب.");
     } finally { setBusy(false); }
   };
 
@@ -30,11 +32,11 @@ export default function LoginPage() {
     setError(""); setMessage("");
     if (!email.trim()) { setError("أدخل بريدك الإلكتروني أولاً لإرسال رابط الاستعادة."); return; }
     try {
-      const supabase = createClient();
-      const { error: resetError } = await supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo: `${window.location.origin}/login` });
+      const neon = createClient();
+      const { error: resetError } = await neon.auth.resetPasswordForEmail(email.trim(), { redirectTo: `${window.location.origin}/login` });
       if (resetError) throw resetError;
       setMessage("إذا كان البريد مسجلاً، فسيصلك رابط إعادة تعيين كلمة المرور.");
-    } catch { setError("تعذر إرسال رابط الاستعادة. تحقق من إعدادات البريد في Supabase."); }
+    } catch { setError("تعذر إرسال رابط الاستعادة. تحقق من إعداد البريد في Neon Auth."); }
   };
 
   return <main className="relative grid min-h-screen place-items-center overflow-hidden px-4 py-10">
