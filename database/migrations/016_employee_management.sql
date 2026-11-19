@@ -29,6 +29,7 @@ revoke all on function public.can_manage_users() from public,anonymous;
 grant execute on function public.can_manage_users() to authenticated;
 
 drop policy if exists "profiles self or managers read" on public.profiles;
+drop policy if exists "profiles self or authorized staff readers" on public.profiles;
 create policy "profiles self or authorized staff readers" on public.profiles for select
 using(id=auth.user_id() or public.has_permission('users','view'));
 

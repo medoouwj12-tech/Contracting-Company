@@ -19,8 +19,10 @@ export default function LoginPage() {
       const neon = createClient();
       const { error: authError } = await neon.auth.signInWithPassword({ email: email.trim(), password });
       if (authError) throw authError;
+      // The workspace repairs the profile right after the redirect, so a failed
+      // bootstrap must not block an otherwise valid sign-in.
       const { error: profileError } = await neon.rpc("bootstrap_current_profile");
-      if (profileError) throw profileError;
+      if (profileError) console.warn("profile bootstrap failed", profileError.message);
       const next = new URLSearchParams(window.location.search).get("next");
       window.location.assign(next?.startsWith("/") ? next : "/");
     } catch (e) {
