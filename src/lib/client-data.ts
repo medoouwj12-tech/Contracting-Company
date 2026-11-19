@@ -44,6 +44,28 @@ export async function fetchWorkspaceCounts(){
   return {properties:propertyResult.count??0,availableProperties:availableResult.count??0,clients:clientResult.count??0};
 }
 
+export async function searchClients(filters:Record<string,string>):Promise<ClientRecord[]>{
+  const {data,error}=await createClient().rpc("search_clients",{p_filters:filters});
+  if(error)throw error;
+  return ((data??[]) as {id:string;name:string;source_names:string[];source:string|null;notes:string|null;tags:string[];address:Partial<ClientAddress>|null;created_at:string;assigned_to:string|null}[]).map(row=>({id:row.id,name:row.name,sourceNames:row.source_names??[],phones:[],source:row.source??"",notes:row.notes??"",assignedTo:row.assigned_to??"",createdAt:row.created_at,tags:row.tags??[],address:{...emptyClientAddress,...(row.address??{})},claim:null,comments:[]}));
+}
+
+export async function fetchClientPhones(clientIds:string[]):Promise<Record<string,string[]>>{
+  if(!clientIds.length)return {};
+  const {data,error}=await createClient().from("client_phones").select("client_id,phone").in("client_id",clientIds);
+  if(error)throw error;
+  const result:Record<string,string[]>={};
+  for(const row of (data??[]) as {client_id:string;phone:string}[])(result[row.client_id]??=[]).push(row.phone);
+  return result;
+}
+
+export async function canViewClientPhones():Promise<boolean>{
+  const db=createClient();const {data:{user},error:userError}=await db.auth.getUser();
+  if(userError||!user)return false;
+  const {data,error}=await db.from("profiles").select("phone_visible").eq("id",user.id).maybeSingle();
+  return !error&&Boolean((data as {phone_visible?:boolean}|null)?.phone_visible);
+}
+
 export async function claimClient(id:string){const {error}=await createClient().rpc("claim_client",{p_client_id:id});if(error)throw error;}
 export async function releaseClient(id:string){const {error}=await createClient().rpc("release_client_claim",{p_client_id:id});if(error)throw error;}
 export async function addClientComment(id:string,body:string){const {error}=await createClient().rpc("add_client_comment",{p_client_id:id,p_body:body});if(error)throw error;}
