@@ -6,7 +6,7 @@ import { initialProperties, type Property } from "@/lib/types";
 import { money } from "@/lib/utils";
 import { ImportDialog } from "@/components/import-dialog";
 import { NewPropertyDialog } from "@/components/new-property-dialog";
-import { archiveProperty, createProperty, fetchFavoriteIds, fetchProperties, setFavorite as saveFavorite, updatePropertyMap, updatePropertyStatus } from "@/lib/property-data";
+import { archiveProperty, createProperty, fetchFavoriteIds, fetchProperties, setFavorite as saveFavorite, updatePropertyLocation, updatePropertyMap, updatePropertyStatus } from "@/lib/property-data";
 import { hasNeonConfig, createClient } from "@/lib/neon/client";
 import { createClientRecord, fetchClients, type ClientRecord } from "@/lib/client-data";
 import { ClientsPage } from "@/components/clients-page";
@@ -58,6 +58,7 @@ export function Workspace(){
  const finishFollowUp=async(id:string)=>{if(remote){try{await completeFollowUp(id);setFollowUps(await fetchFollowUps())}catch{showToast("تعذر إكمال المتابعة")};return}setFollowUps(old=>old.map(x=>x.id===id?{...x,completed:true}:x))};
  const changeStatus=async(id:string,status:Property["status"])=>{if(remote){try{await updatePropertyStatus(id,status);setProperties(await fetchProperties())}catch{showToast("لا تملك صلاحية تعديل حالة هذا العقار")};return}setProperties(old=>old.map(x=>x.id===id?{...x,status}:x))};
  const changePropertyMap=async(id:string,latitude:number|null,longitude:number|null)=>{if(remote){await updatePropertyMap(id,latitude,longitude);setProperties(await fetchProperties());showToast("تم تحديث موقع الخريطة");return}setProperties(old=>old.map(x=>x.id===id?{...x,latitude,longitude,hasMap:latitude!==null&&longitude!==null}:x))};
+ const changePropertyLocation=async(id:string,location:{area:string;sector:string;distribution:string;block:string;plot:string;street:string;locationType:string})=>{if(remote){await updatePropertyLocation(id,location);setProperties(await fetchProperties());showToast("تم تحديث ترميز الموقع");return}setProperties(old=>old.map(x=>x.id===id?{...x,...location,area:location.area||"غير محدد",hasLocation:Boolean(location.area&&(location.block||location.plot))}:x))};
  const archive=async(id:string,comment:string)=>{if(remote){try{await archiveProperty(id,comment);setProperties(await fetchProperties());showToast("تمت أرشفة العقار")}catch{showToast("تعذرت الأرشفة. تحقق من صلاحية الحذف وتطبيق ترحيل Neon رقم 003.")}}else{setProperties(old=>old.filter(x=>x.id!==id));showToast("تمت أرشفة العقار في المعاينة")}setSelectedId(null)};
  const archiveClientRecord=async(id:string,_comment:string)=>{if(remote){try{setClients(await fetchClients());showToast("تمت أرشفة ملف العميل")}catch{showToast("تمت الأرشفة لكن تعذر تحديث القائمة")}}else{setClients(old=>old.filter(x=>x.id!==id));showToast("تمت أرشفة ملف العميل في المعاينة")}};
  const toggleFavorite=async(id:string)=>{const shouldFavorite=!favorites.includes(id);if(remote){try{await saveFavorite(id,shouldFavorite);setFavorites(old=>shouldFavorite?[...old,id]:old.filter(x=>x!==id))}catch{showToast("تعذر تحديث المفضلة على Neon")};return}setFavorites(old=>shouldFavorite?[...old,id]:old.filter(x=>x!==id))};
@@ -79,7 +80,7 @@ export function Workspace(){
   </div>
   <AnimatePresence>{importOpen&&<ImportDialog onClose={()=>setImportOpen(false)} onImport={addImported}/>}</AnimatePresence>
   <AnimatePresence>{addOpen&&<NewPropertyDialog onClose={()=>setAddOpen(false)} onSave={saveProperty}/>}</AnimatePresence>
-  <AnimatePresence>{selectedId&&properties.find(p=>p.id===selectedId)&&<PropertyDetails property={properties.find(p=>p.id===selectedId)!} favorite={favorites.includes(selectedId)} remote={remote} onClose={()=>setSelectedId(null)} onFavorite={()=>toggleFavorite(selectedId)} onStatus={status=>changeStatus(selectedId,status)} onArchive={comment=>archive(selectedId,comment)} onMapUpdate={(latitude,longitude)=>changePropertyMap(selectedId,latitude,longitude)}/>}</AnimatePresence>
+  <AnimatePresence>{selectedId&&properties.find(p=>p.id===selectedId)&&<PropertyDetails property={properties.find(p=>p.id===selectedId)!} favorite={favorites.includes(selectedId)} remote={remote} onClose={()=>setSelectedId(null)} onFavorite={()=>toggleFavorite(selectedId)} onStatus={status=>changeStatus(selectedId,status)} onArchive={comment=>archive(selectedId,comment)} onMapUpdate={(latitude,longitude)=>changePropertyMap(selectedId,latitude,longitude)} onLocationUpdate={location=>changePropertyLocation(selectedId,location)}/>}</AnimatePresence>
   <AnimatePresence>{toast&&<motion.div initial={{opacity:0,y:12}} animate={{opacity:1,y:0}} exit={{opacity:0,y:8}} className="fixed bottom-6 left-1/2 z-[80] flex -translate-x-1/2 items-center gap-2 rounded-xl bg-slate-900 px-5 py-3 text-sm font-medium text-white shadow-xl"><Check size={16} className="text-teal-400"/>{toast}</motion.div>}</AnimatePresence>
  </div>
 }
