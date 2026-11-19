@@ -23,7 +23,7 @@ revoke all on public.property_phones from anonymous,authenticated;
 revoke all on public.client_phones from anonymous,authenticated;
 
 create or replace function public.reveal_property_contact(p_property_id uuid,p_comment text)
-returns table(phone text,position smallint)
+returns table(phone text,phone_position smallint)
 language plpgsql security definer set search_path=public,pg_temp as $$
 declare owner_id text; related_client uuid; actor_id text:=auth.user_id(); comment_record uuid;
 begin

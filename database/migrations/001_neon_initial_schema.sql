@@ -6,7 +6,10 @@ create type public.app_role as enum ('super_admin','manager','sales_agent','call
 create type public.property_status as enum ('available','sold','lost');
 
 create table public.roles (id uuid primary key default gen_random_uuid(), name text not null unique, name_ar text not null, is_system boolean not null default false, created_at timestamptz not null default now());
-create table public.profiles (id text primary key references neon_auth."user"(id) on delete cascade, full_name text not null, email text not null, role_id uuid references public.roles(id), manager_id text references public.profiles(id), team_id uuid, is_active boolean not null default true, phone_visible boolean not null default false, price_visible boolean not null default true, created_at timestamptz not null default now(), updated_at timestamptz not null default now());
+-- profiles.id is text because the app treats auth identities as strings, while
+-- Neon Auth (Better Auth) stores uuid ids. auth_user_id keeps the referential
+-- link to neon_auth."user" and cascades profile deletion with the auth user.
+create table public.profiles (id text primary key, auth_user_id uuid unique references neon_auth."user"(id) on delete cascade, full_name text not null, email text not null, role_id uuid references public.roles(id), manager_id text references public.profiles(id), team_id uuid, is_active boolean not null default true, phone_visible boolean not null default false, price_visible boolean not null default true, created_at timestamptz not null default now(), updated_at timestamptz not null default now());
 create table public.permissions (id uuid primary key default gen_random_uuid(), module text not null, action text not null, unique(module,action));
 create table public.role_permissions (role_id uuid not null references public.roles(id) on delete cascade, permission_id uuid not null references public.permissions(id) on delete cascade, allowed boolean not null default false, primary key(role_id,permission_id));
 
@@ -115,13 +118,13 @@ returns text language plpgsql security definer set search_path=public,neon_auth,
 declare auth_user neon_auth."user"%rowtype; new_name text;
 begin
   if auth.user_id() is null then raise exception 'Authentication is required'; end if;
-  select * into auth_user from neon_auth."user" where id=auth.user_id();
+  select * into auth_user from neon_auth."user" where id=auth.user_id()::uuid;
   if not found then raise exception 'Neon Auth user was not found'; end if;
   new_name:=coalesce(nullif(auth_user.name,''),split_part(auth_user.email,'@',1));
-  insert into public.profiles(id,full_name,email,role_id)
-  select auth_user.id,new_name,auth_user.email,r.id from public.roles r where r.name='viewer'
+  insert into public.profiles(id,auth_user_id,full_name,email,role_id)
+  select auth_user.id::text,auth_user.id,new_name,auth_user.email,r.id from public.roles r where r.name='viewer'
   on conflict(id) do update set email=excluded.email,full_name=coalesce(nullif(public.profiles.full_name,''),excluded.full_name);
-  return auth_user.id;
+  return auth_user.id::text;
 end;
 $$;
 revoke all on function public.bootstrap_current_profile() from public,anonymous;
