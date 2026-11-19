@@ -9,6 +9,15 @@ export type ClientRecord={id:string;name:string;sourceNames?:string[];phones:str
 
 async function fetchAll<T>(query:(from:number,to:number)=>any):Promise<T[]>{const rows:T[]=[];const pageSize=500;for(let base=0;;base+=pageSize*2){const pages=await Promise.all(Array.from({length:2},(_,i)=>query(base+i*pageSize,base+i*pageSize+pageSize-1)));for(const result of pages){if(result.error)throw result.error;rows.push(...((result.data??[]) as T[]))}if(pages.some(result=>(result.data??[]).length<pageSize))return rows}}
 
+export async function bootstrapCurrentProfile(){
+  for(let attempt=0;attempt<3;attempt++){
+    const {error}=await createClient().rpc("bootstrap_current_profile");
+    if(!error)return;
+    if(error.code!=="P0001"||!error.message?.includes("Authentication is required")||attempt===2)throw error;
+    await new Promise(resolve=>setTimeout(resolve,300*(attempt+1)));
+  }
+}
+
 export async function fetchClients():Promise<ClientRecord[]>{
   const neon=createClient();
   const rows=await fetchAll<{id:string;name:string;source_names:string[];source:string|null;notes:string|null;tags:string[];address:Partial<ClientAddress>|null;created_at:string;assigned_to:string|null}>((from,to)=>neon.from("clients").select("id,name,source_names,source,notes,tags,address,created_at,assigned_to").is("deleted_at",null).order("created_at",{ascending:false}).order("id",{ascending:true}).range(from,to));
