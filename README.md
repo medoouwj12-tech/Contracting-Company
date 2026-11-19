@@ -14,6 +14,7 @@
 - المفضلة محفوظة لكل مستخدم في Neon عند تفعيل الاتصال.
 - جلسات حضور تبدأ وتنتهي من حساب الموظف، مع سجل للفريق وخيار المدير لإنهاء الجلسة.
 - قوائم عمل سريعة للعقارات التي ينقصها الموقع أو بيانات التواصل، وآخر ١٠٠ سجل.
+- تحرير إحداثيات الخريطة وفتحها على الخرائط من ملف العقار.
 - بيانات شركة مشتركة قابلة للطباعة مع ملفات العقارات.
 - ملفات «العقار المطلوب» بمعايير العميل والمنطقة والنوع والمساحة والسعر وحالة المطابقة.
 - مركز إشعارات لعمليات الإسناد، مع حالات القراءة والأرشفة والاستعادة وانتهاء الصلاحية بعد ٦٠ يومًا.
@@ -40,7 +41,7 @@ npm run dev
 4. انسخ عنوان Data API إلى `NEXT_PUBLIC_NEON_DATA_API_URL`.
 5. أنشئ قيمة عشوائية سرية بطول 32 حرفاً أو أكثر وضعها في `NEON_AUTH_COOKIE_SECRET`. هذا متغير خادمي فقط.
 6. ضع اتصال Postgres المباشر في `DATABASE_URL` لتطبيق الترحيلات. لا تضف بادئة `NEXT_PUBLIC_` إلى بيانات الاتصال.
-7. طبّق بالترتيب `database/migrations/001_neon_initial_schema.sql` ثم ملفات `002_video_contact_audit.sql` و`003_recycle_bin.sql` و`004_staff_messaging.sql` و`005_contact_access_report.sql` و`006_work_sessions.sql` و`007_property_work_queues.sql` و`008_company_profile.sql` و`009_property_requests.sql` و`010_notifications_center.sql` و`011_ad_request_workflow.sql` على قاعدة Neon بعد تفعيل Neon Auth؛ الترحيل يربط `profiles.id` بهوية `neon_auth.user.id` ويستخدم `auth.user_id()` في سياسات RLS.
+7. طبّق بالترتيب `database/migrations/001_neon_initial_schema.sql` ثم ملفات `002_video_contact_audit.sql` و`003_recycle_bin.sql` و`004_staff_messaging.sql` و`005_contact_access_report.sql` و`006_work_sessions.sql` و`007_property_work_queues.sql` و`008_company_profile.sql` و`009_property_requests.sql` و`010_notifications_center.sql` و`011_ad_request_workflow.sql` و`012_property_map_editor.sql` على قاعدة Neon بعد تفعيل Neon Auth؛ الترحيل يربط `profiles.id` بهوية `neon_auth.user.id` ويستخدم `auth.user_id()` في سياسات RLS.
 8. بعد إنشاء المستخدم الأول وتسجيل دخوله، امنحه دور مدير النظام من محرر SQL:
 
    ```sql
