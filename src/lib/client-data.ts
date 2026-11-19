@@ -7,7 +7,7 @@ export type ClientComment={id:string;body:string;authorName:string;createdAt:str
 export type ClientClaim={employeeId:string;employeeName:string;claimedAt:string};
 export type ClientRecord={id:string;name:string;sourceNames?:string[];phones:string[];source:string;notes:string;assignedTo:string;createdAt:string;tags:string[];address?:ClientAddress;claim?:ClientClaim|null;comments?:ClientComment[]};
 
-async function fetchAll<T>(query:(from:number,to:number)=>any):Promise<T[]>{const rows:T[]=[];const pageSize=500;for(let base=0;;base+=pageSize*2){const pages=await Promise.all(Array.from({length:2},(_,i)=>query(base+i*pageSize,base+i*pageSize+pageSize-1)));for(const result of pages){if(result.error)throw result.error;rows.push(...((result.data??[]) as T[]))}if(pages.some(result=>(result.data??[]).length<pageSize))return rows}}
+async function fetchAll<T>(query:(from:number,to:number)=>any):Promise<T[]>{const rows:T[]=[];const pageSize=500;for(let base=0;;base+=pageSize*2){const pages=await Promise.all(Array.from({length:2},async(_,i)=>{const from=base+i*pageSize;let result:any;for(let attempt=0;attempt<3;attempt++){result=await query(from,from+pageSize-1);if(result.error||(result.data??[]).length===pageSize||attempt===2)break;await new Promise(resolve=>setTimeout(resolve,250*(attempt+1)))}return result}));for(const result of pages){if(result.error)throw result.error;rows.push(...((result.data??[]) as T[]))}if(pages.some(result=>(result.data??[]).length<pageSize))return rows}}
 
 export async function bootstrapCurrentProfile(){
   for(let attempt=0;attempt<3;attempt++){
