@@ -39,7 +39,7 @@ export async function revealPropertyContact(id:string,comment:string):Promise<st
 
 export async function createProperty(property:Property,imageData:string|null=null) {
   const db=createClient();
-  const {error}=await db.rpc("create_property_with_image",{payload:{code:property.code,client:property.client,phones:property.phones,type:property.type,offer:property.offer,area:property.area,block:property.block,plot:property.plot,street:property.street,location_type:property.locationType,size:property.size,price:property.price,employee:property.employee,details:property.details},image_data:imageData});
+  const {error}=await db.rpc("create_property_with_image",{payload:{code:property.code,client:property.client,phones:property.phones,type:property.type,offer:property.offer,area:property.area,block:property.block,plot:property.plot,street:property.street,avenue:property.avenue,floor:property.floor,building_type:property.buildingType,rooms_details:property.roomsDetails,location_type:property.locationType,size:property.size,price:property.price,employee:property.employee,details:property.details},image_data:imageData});
   if(error) throw error;
 }
 
