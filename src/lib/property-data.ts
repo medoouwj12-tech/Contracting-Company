@@ -13,20 +13,16 @@ export async function fetchProperties(): Promise<Property[]> {
   const rows=await fetchAll<PropertyRow>((from,to)=>db.from("properties_safe").select("*").order("entry_date",{ascending:false}).order("id",{ascending:true}).range(from,to));
   if(!rows.length) return [];
   const ids=rows.map(row=>row.id);
-  const clientIds=[...new Set(rows.flatMap(row=>row.client_id?[row.client_id]:[]))];
   const employeeIds=[...new Set(rows.flatMap(row=>row.assigned_to?[row.assigned_to]:[]))];
-  const clientBatches=Array.from({length:Math.ceil(clientIds.length/500)},(_,i)=>clientIds.slice(i*500,(i+1)*500));
-  const [lookupsResult,employeesResult]=await Promise.all([
+  const [lookupsResult,clientRows,employeesResult]=await Promise.all([
     db.from("lookups").select("id,type,name_ar"),
+    fetchAll<{id:string;name:string}>((from,to)=>db.from("clients").select("id,name").is("deleted_at",null).order("id",{ascending:true}).range(from,to)),
     employeeIds.length?db.from("profiles").select("id,full_name").in("id",employeeIds):Promise.resolve({data:[],error:null}),
   ]);
-  const clientBatchResults=[];
-  for(let i=0;i<clientBatches.length;i+=5)clientBatchResults.push(...await Promise.all(clientBatches.slice(i,i+5).map(ids=>db.from("clients").select("id,name").in("id",ids))));
   if(lookupsResult.error) throw lookupsResult.error;
-  for(const result of clientBatchResults)if(result.error)throw result.error;
   if(employeesResult.error) throw employeesResult.error;
   const lookups=new Map(((lookupsResult.data??[]) as LookupRow[]).map(x=>[x.id,x.name_ar]));
-  const clients=new Map(clientBatchResults.flatMap(result=>(result.data??[]) as {id:string;name:string}[]).map(x=>[x.id,x.name]));
+  const clients=new Map(clientRows.map(x=>[x.id,x.name]));
   const employees=new Map(((employeesResult.data??[]) as {id:string;full_name:string}[]).map(x=>[x.id,x.full_name]));
   return rows.map(row=>{const sourceExcel=row.source_excel??{};const sourceSearch=Object.values(sourceExcel).filter(value=>value!==null&&value!==undefined&&!String(value).startsWith("محفوظ ضمن بيانات التواصل")).join(" ");return {id:row.id,code:row.code,client:row.client_id?(clients.get(row.client_id)??"عميل غير معروف"):"غير مسجل",phones:[],type:row.type_id?(lookups.get(row.type_id)??"غير محدد"):"غير محدد",offer:row.offer_type_id?(lookups.get(row.offer_type_id)??"—"):"—",area:row.area_id?(lookups.get(row.area_id)??"غير محدد"):"غير محدد",sector:row.sector??"",distribution:row.distribution??"",block:row.block??"",plot:row.plot??"",street:row.street??"",avenue:row.avenue??"",floor:row.floor??"",buildingType:row.building_type??"",roomsDetails:row.rooms_details??"",sourceExcel,sourceSearch,locationType:row.location_type_id?(lookups.get(row.location_type_id)??""):"",size:Number(row.area_m2??0),price:row.asking_price_kwd===null?null:Number(row.asking_price_kwd),employee:row.assigned_to?(employees.get(row.assigned_to)??"غير معيّن"):"غير معيّن",status:row.status,date:row.entry_date,details:row.details??"",hasMap:row.has_map,hasContact:row.has_contact,hasLocation:row.has_location,lastContactAt:row.last_contact_at,latitude:row.latitude===null?null:Number(row.latitude),longitude:row.longitude===null?null:Number(row.longitude)}});
 }
