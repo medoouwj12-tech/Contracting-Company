@@ -76,7 +76,7 @@ export function Workspace(){
   </div>
   <AnimatePresence>{importOpen&&<ImportDialog onClose={()=>setImportOpen(false)} onImport={addImported}/>}</AnimatePresence>
   <AnimatePresence>{addOpen&&<NewPropertyDialog onClose={()=>setAddOpen(false)} onSave={saveProperty}/>}</AnimatePresence>
-  <AnimatePresence>{selectedId&&properties.find(p=>p.id===selectedId)&&<PropertyDetails property={properties.find(p=>p.id===selectedId)!} favorite={favorites.includes(selectedId)} onClose={()=>setSelectedId(null)} onFavorite={()=>toggleFavorite(selectedId)} onStatus={status=>changeStatus(selectedId,status)} onArchive={comment=>archive(selectedId,comment)}/>}</AnimatePresence>
+  <AnimatePresence>{selectedId&&properties.find(p=>p.id===selectedId)&&<PropertyDetails property={properties.find(p=>p.id===selectedId)!} favorite={favorites.includes(selectedId)} remote={remote} onClose={()=>setSelectedId(null)} onFavorite={()=>toggleFavorite(selectedId)} onStatus={status=>changeStatus(selectedId,status)} onArchive={comment=>archive(selectedId,comment)}/>}</AnimatePresence>
   <AnimatePresence>{toast&&<motion.div initial={{opacity:0,y:12}} animate={{opacity:1,y:0}} exit={{opacity:0,y:8}} className="fixed bottom-6 left-1/2 z-[80] flex -translate-x-1/2 items-center gap-2 rounded-xl bg-slate-900 px-5 py-3 text-sm font-medium text-white shadow-xl"><Check size={16} className="text-teal-400"/>{toast}</motion.div>}</AnimatePresence>
  </div>
 }
