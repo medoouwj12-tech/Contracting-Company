@@ -1,14 +1,15 @@
 "use client";
 
 import type { Property } from "@/lib/types";
+import type { ClientRecord } from "@/lib/client-data";
 import { createClient } from "@/lib/neon/client";
 
 type LookupRow = { id:string; type:string; name_ar:string };
 type PropertyRow = { id:string; code:string; client_id:string|null; type_id:string|null; offer_type_id:string|null; area_id:string|null; location_type_id:string|null; block:string|null; plot:string|null; street:string|null; avenue:string|null; floor:string|null; building_type:string|null; rooms_details:string|null; source_excel:Record<string,unknown>|null; sector:string|null;distribution:string|null;area_m2:number|null; asking_price_kwd:number|null; assigned_to:string|null; status:Property["status"]; entry_date:string; details:string|null;has_map:boolean;has_contact:boolean;has_location:boolean;last_contact_at:string|null;latitude:number|null;longitude:number|null };
 
-async function fetchAll<T>(query:(from:number,to:number)=>any):Promise<T[]>{const rows:T[]=[];for(let base=0;;base+=5000){const pages=await Promise.all(Array.from({length:5},(_,i)=>query(base+i*1000,base+i*1000+999)));for(const result of pages){if(result.error)throw result.error;rows.push(...((result.data??[]) as T[]))}if(pages.some(result=>(result.data??[]).length<1000))return rows}}
+async function fetchAll<T>(query:(from:number,to:number)=>any):Promise<T[]>{const rows:T[]=[];const pageSize=500;for(let base=0;;base+=pageSize*2){const pages=await Promise.all(Array.from({length:2},(_,i)=>query(base+i*pageSize,base+i*pageSize+pageSize-1)));for(const result of pages){if(result.error)throw result.error;rows.push(...((result.data??[]) as T[]))}if(pages.some(result=>(result.data??[]).length<pageSize))return rows}}
 
-export async function fetchProperties(): Promise<Property[]> {
+export async function fetchProperties(clientRecords?:ClientRecord[]): Promise<Property[]> {
   const db=createClient();
   const rows=await fetchAll<PropertyRow>((from,to)=>db.from("properties_safe").select("*").order("entry_date",{ascending:false}).order("id",{ascending:true}).range(from,to));
   if(!rows.length) return [];
@@ -16,7 +17,7 @@ export async function fetchProperties(): Promise<Property[]> {
   const employeeIds=[...new Set(rows.flatMap(row=>row.assigned_to?[row.assigned_to]:[]))];
   const [lookupsResult,clientRows,employeesResult]=await Promise.all([
     db.from("lookups").select("id,type,name_ar"),
-    fetchAll<{id:string;name:string}>((from,to)=>db.from("clients").select("id,name").is("deleted_at",null).order("id",{ascending:true}).range(from,to)),
+    clientRecords?Promise.resolve(clientRecords.map(({id,name})=>({id,name}))):fetchAll<{id:string;name:string}>((from,to)=>db.from("clients").select("id,name").is("deleted_at",null).order("id",{ascending:true}).range(from,to)),
     employeeIds.length?db.from("profiles").select("id,full_name").in("id",employeeIds):Promise.resolve({data:[],error:null}),
   ]);
   if(lookupsResult.error) throw lookupsResult.error;

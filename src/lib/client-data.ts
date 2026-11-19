@@ -7,7 +7,7 @@ export type ClientComment={id:string;body:string;authorName:string;createdAt:str
 export type ClientClaim={employeeId:string;employeeName:string;claimedAt:string};
 export type ClientRecord={id:string;name:string;sourceNames?:string[];phones:string[];source:string;notes:string;assignedTo:string;createdAt:string;tags:string[];address?:ClientAddress;claim?:ClientClaim|null;comments?:ClientComment[]};
 
-async function fetchAll<T>(query:(from:number,to:number)=>any):Promise<T[]>{const rows:T[]=[];for(let base=0;;base+=5000){const pages=await Promise.all(Array.from({length:5},(_,i)=>query(base+i*1000,base+i*1000+999)));for(const result of pages){if(result.error)throw result.error;rows.push(...((result.data??[]) as T[]))}if(pages.some(result=>(result.data??[]).length<1000))return rows}}
+async function fetchAll<T>(query:(from:number,to:number)=>any):Promise<T[]>{const rows:T[]=[];const pageSize=500;for(let base=0;;base+=pageSize*2){const pages=await Promise.all(Array.from({length:2},(_,i)=>query(base+i*pageSize,base+i*pageSize+pageSize-1)));for(const result of pages){if(result.error)throw result.error;rows.push(...((result.data??[]) as T[]))}if(pages.some(result=>(result.data??[]).length<pageSize))return rows}}
 
 export async function fetchClients():Promise<ClientRecord[]>{
   const neon=createClient();
