@@ -33,10 +33,22 @@ export async function fetchClients(maxRows=50,includeActivity=false,offset=0):Pr
 }
 
 export async function fetchWorkspaceCounts(){
-  const {data,error}=await createClient().rpc("workspace_counts");
-  if(error)throw error;
-  const row=(Array.isArray(data)?data[0]:data) as {properties?:number;availableProperties?:number;clients?:number}|null;
-  return {properties:Number(row?.properties??0),availableProperties:Number(row?.availableProperties??0),clients:Number(row?.clients??0)};
+  const neon=createClient();
+  const {data,error}=await neon.rpc("workspace_counts");
+  if(!error){
+    const row=(Array.isArray(data)?data[0]:data) as {properties?:number;availableProperties?:number;clients?:number}|null;
+    return {properties:Number(row?.properties??0),availableProperties:Number(row?.availableProperties??0),clients:Number(row?.clients??0)};
+  }
+  // Fall back to plain counts when the Data API has not reloaded the new RPC.
+  const [propertyResult,availableResult,clientResult]=await Promise.all([
+    neon.from("properties").select("id",{count:"exact",head:true}).is("deleted_at",null),
+    neon.from("properties").select("id",{count:"exact",head:true}).is("deleted_at",null).eq("status","available"),
+    neon.from("clients").select("id",{count:"exact",head:true}).is("deleted_at",null),
+  ]);
+  if(propertyResult.error)throw propertyResult.error;
+  if(availableResult.error)throw availableResult.error;
+  if(clientResult.error)throw clientResult.error;
+  return {properties:propertyResult.count??0,availableProperties:availableResult.count??0,clients:clientResult.count??0};
 }
 
 export async function searchClients(filters:Record<string,string>):Promise<ClientRecord[]>{

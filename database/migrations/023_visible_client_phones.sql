@@ -8,3 +8,7 @@ using (
   public.has_permission('clients','view')
   and exists(select 1 from public.clients c where c.id=client_phones.client_id and c.deleted_at is null)
 );
+
+-- The table never received a SELECT grant for signed-in users, so the client
+-- card stayed empty even when the policy allowed the rows.
+grant select on table public.client_phones to authenticated;
