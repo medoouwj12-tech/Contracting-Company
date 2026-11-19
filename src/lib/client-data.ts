@@ -7,7 +7,7 @@ export type ClientComment={id:string;body:string;authorName:string;createdAt:str
 export type ClientClaim={employeeId:string;employeeName:string;claimedAt:string};
 export type ClientRecord={id:string;name:string;sourceNames?:string[];phones:string[];source:string;notes:string;assignedTo:string;createdAt:string;tags:string[];address?:ClientAddress;claim?:ClientClaim|null;comments?:ClientComment[]};
 
-async function fetchAll<T>(query:(from:number,to:number)=>any):Promise<T[]>{const rows:T[]=[];const pageSize=500;for(let base=0;;base+=pageSize*2){const pages=await Promise.all(Array.from({length:2},async(_,i)=>{const from=base+i*pageSize;let result:any;for(let attempt=0;attempt<3;attempt++){result=await query(from,from+pageSize-1);if(result.error||(result.data??[]).length===pageSize||attempt===2)break;await new Promise(resolve=>setTimeout(resolve,250*(attempt+1)))}return result}));for(const result of pages){if(result.error)throw result.error;rows.push(...((result.data??[]) as T[]))}if(pages.some(result=>(result.data??[]).length<pageSize))return rows}}
+async function fetchAll<T>(query:(from:number,to:number)=>any,maxRows=Number.POSITIVE_INFINITY):Promise<T[]>{const rows:T[]=[];const pageSize=500;for(let base=0;;base+=pageSize*2){const remaining=maxRows-rows.length;if(remaining<=0)return rows;const pageCount=Math.min(2,Math.ceil(remaining/pageSize));const pages=await Promise.all(Array.from({length:pageCount},async(_,i)=>{const from=base+i*pageSize,limit=Math.min(pageSize,maxRows-(rows.length+i*pageSize));let result:any;for(let attempt=0;attempt<3;attempt++){result=await query(from,from+limit-1);if(result.error||(result.data??[]).length===limit||attempt===2)break;await new Promise(resolve=>setTimeout(resolve,250*(attempt+1)))}return result}));for(const result of pages){if(result.error)throw result.error;rows.push(...((result.data??[]) as T[]))}if(rows.length>=maxRows||pages.some(result=>(result.data??[]).length<pageSize))return rows}}
 
 export async function bootstrapCurrentProfile(){
   for(let attempt=0;attempt<3;attempt++){
@@ -18,16 +18,30 @@ export async function bootstrapCurrentProfile(){
   }
 }
 
-export async function fetchClients():Promise<ClientRecord[]>{
+export async function fetchClients(maxRows=Number.POSITIVE_INFINITY,includeActivity=true):Promise<ClientRecord[]>{
   const neon=createClient();
-  const rows=await fetchAll<{id:string;name:string;source_names:string[];source:string|null;notes:string|null;tags:string[];address:Partial<ClientAddress>|null;created_at:string;assigned_to:string|null}>((from,to)=>neon.from("clients").select("id,name,source_names,source,notes,tags,address,created_at,assigned_to").is("deleted_at",null).order("created_at",{ascending:false}).order("id",{ascending:true}).range(from,to));
+  const rows=await fetchAll<{id:string;name:string;source_names:string[];source:string|null;notes:string|null;tags:string[];address:Partial<ClientAddress>|null;created_at:string;assigned_to:string|null}>((from,to)=>neon.from("clients").select("id,name,source_names,source,notes,tags,address,created_at,assigned_to").is("deleted_at",null).order("created_at",{ascending:false}).order("id",{ascending:true}).range(from,to),maxRows);
   if(!rows.length)return [];
+  if(!includeActivity)return rows.map(row=>({id:row.id,name:row.name,sourceNames:row.source_names??[],phones:[],source:row.source??"",notes:row.notes??"",assignedTo:row.assigned_to??"",createdAt:row.created_at,tags:row.tags??[],address:{...emptyClientAddress,...(row.address??{})},claim:null,comments:[]}));
   const [claimResult,commentResult]=await Promise.all([neon.rpc("list_active_client_claims"),neon.rpc("list_client_comments")]);
   if(claimResult.error)throw claimResult.error;if(commentResult.error)throw commentResult.error;
   const claims=(claimResult.data??[]) as {client_id:string;employee_id:string;employee_name:string;claimed_at:string}[];
   const comments=(commentResult.data??[]) as {id:string;client_id:string;body:string;author_name:string;created_at:string}[];
   const claimsByClient=new Map(claims.map(x=>[x.client_id,x]));const commentsByClient=new Map<string,ClientComment[]>();for(const x of comments){const group=commentsByClient.get(x.client_id)??[];group.push({id:x.id,body:x.body,authorName:x.author_name,createdAt:x.created_at});commentsByClient.set(x.client_id,group)}
   return rows.map(row=>{const claim=claimsByClient.get(row.id);return {id:row.id,name:row.name,sourceNames:row.source_names??[],phones:[],source:row.source??"",notes:row.notes??"",assignedTo:row.assigned_to??"",createdAt:row.created_at,tags:row.tags??[],address:{...emptyClientAddress,...(row.address??{})},claim:claim?{employeeId:claim.employee_id,employeeName:claim.employee_name,claimedAt:claim.claimed_at}:null,comments:commentsByClient.get(row.id)??[]}});
+}
+
+export async function fetchWorkspaceCounts(){
+  const neon=createClient();
+  const [propertyResult,availableResult,clientResult]=await Promise.all([
+    neon.from("properties").select("id",{count:"exact",head:true}).is("deleted_at",null),
+    neon.from("properties").select("id",{count:"exact",head:true}).is("deleted_at",null).eq("status","available"),
+    neon.from("clients").select("id",{count:"exact",head:true}).is("deleted_at",null),
+  ]);
+  if(propertyResult.error)throw propertyResult.error;
+  if(availableResult.error)throw availableResult.error;
+  if(clientResult.error)throw clientResult.error;
+  return {properties:propertyResult.count??0,availableProperties:availableResult.count??0,clients:clientResult.count??0};
 }
 
 export async function claimClient(id:string){const {error}=await createClient().rpc("claim_client",{p_client_id:id});if(error)throw error;}
