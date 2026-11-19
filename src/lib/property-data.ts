@@ -35,11 +35,13 @@ export async function revealPropertyContact(id:string,comment:string):Promise<st
   return ((data??[]) as {phone:string}[]).map(row=>row.phone);
 }
 
-export async function createProperty(property:Property) {
+export async function createProperty(property:Property,imageData:string|null=null) {
   const db=createClient();
-  const {error}=await db.rpc("create_property_with_client",{payload:{code:property.code,client:property.client,phones:property.phones,type:property.type,offer:property.offer,area:property.area,block:property.block,plot:property.plot,street:property.street,location_type:property.locationType,size:property.size,price:property.price,employee:property.employee,details:property.details}});
+  const {error}=await db.rpc("create_property_with_image",{payload:{code:property.code,client:property.client,phones:property.phones,type:property.type,offer:property.offer,area:property.area,block:property.block,plot:property.plot,street:property.street,location_type:property.locationType,size:property.size,price:property.price,employee:property.employee,details:property.details},image_data:imageData});
   if(error) throw error;
 }
+
+export async function fetchPropertyImages(id:string):Promise<{storage_path:string;caption:string|null}[]>{const {data,error}=await createClient().rpc("get_property_images",{p_property_id:id});if(error)throw error;return (data??[]) as {storage_path:string;caption:string|null}[];}
 
 export async function updatePropertyStatus(id:string,status:Property["status"]){const db=createClient();const {error}=await db.rpc("update_property_status",{property_id:id,new_status:status});if(error)throw error;}
 

@@ -19,6 +19,8 @@
 - بيانات شركة مشتركة قابلة للطباعة مع ملفات العقارات.
 - ملفات «العقار المطلوب» بمعايير العميل والمنطقة والنوع والمساحة والسعر وحالة المطابقة.
 - مطابقة تلقائية عند إنشاء طلب أو إضافة عقار مطابق، مع إشعار الموظف وإظهار نسبة المطابقة بحسب المعايير.
+- شاشة بحث موحدة بفلاتر حقول العقار والعنوان والتاريخ والمساحة والسعر والعميل، مع بحث الهاتف المسجل بصلاحية وتدقيق.
+- حفظ عنوان العميل التفصيلي وإرفاق صورة العقار في Neon ضمن حد رفع مناسب للـData API.
 - مركز إشعارات لعمليات الإسناد، مع حالات القراءة والأرشفة والاستعادة وانتهاء الصلاحية بعد ٦٠ يومًا.
 - سير عمل طلبات الإعلان للنشر أو استكمال البيانات أو الحذف المؤقت لمدة ٦٠ يومًا.
 - إعدادات النشر على Vercel وملفات ترحيل قاعدة البيانات في `database/migrations`.
@@ -43,7 +45,7 @@ npm run dev
 4. انسخ عنوان Data API إلى `NEXT_PUBLIC_NEON_DATA_API_URL`.
 5. أنشئ قيمة عشوائية سرية بطول 32 حرفاً أو أكثر وضعها في `NEON_AUTH_COOKIE_SECRET`. هذا متغير خادمي فقط.
 6. ضع اتصال Postgres المباشر في `DATABASE_URL` لتطبيق الترحيلات. لا تضف بادئة `NEXT_PUBLIC_` إلى بيانات الاتصال.
-7. طبّق بالترتيب `database/migrations/001_neon_initial_schema.sql` ثم ملفات `002_video_contact_audit.sql` و`003_recycle_bin.sql` و`004_staff_messaging.sql` و`005_contact_access_report.sql` و`006_work_sessions.sql` و`007_property_work_queues.sql` و`008_company_profile.sql` و`009_property_requests.sql` و`010_notifications_center.sql` و`011_ad_request_workflow.sql` و`012_property_map_editor.sql` و`013_property_location_codes.sql` و`014_request_auto_matching.sql` على قاعدة Neon بعد تفعيل Neon Auth؛ الترحيل يربط `profiles.id` بهوية `neon_auth.user.id` ويستخدم `auth.user_id()` في سياسات RLS.
+7. طبّق بالترتيب `database/migrations/001_neon_initial_schema.sql` ثم ملفات `002_video_contact_audit.sql` و`003_recycle_bin.sql` و`004_staff_messaging.sql` و`005_contact_access_report.sql` و`006_work_sessions.sql` و`007_property_work_queues.sql` و`008_company_profile.sql` و`009_property_requests.sql` و`010_notifications_center.sql` و`011_ad_request_workflow.sql` و`012_property_map_editor.sql` و`013_property_location_codes.sql` و`014_request_auto_matching.sql` و`015_client_addresses_and_search_media.sql` على قاعدة Neon بعد تفعيل Neon Auth؛ الترحيل يربط `profiles.id` بهوية `neon_auth.user.id` ويستخدم `auth.user_id()` في سياسات RLS. ترحيل 015 مطبق على قاعدة المشروع المتصلة وقت التجهيز.
 8. بعد إنشاء المستخدم الأول وتسجيل دخوله، امنحه دور مدير النظام من محرر SQL:
 
    ```sql
