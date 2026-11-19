@@ -1,4 +1,5 @@
-create or replace function public.search_clients(p_filters jsonb default '{}'::jsonb)
+drop function if exists public.search_clients(jsonb);
+create function public.search_clients(p_filters jsonb default '{}'::jsonb)
 returns table(
   id uuid,
   name text,
@@ -8,7 +9,10 @@ returns table(
   tags text[],
   address jsonb,
   created_at timestamptz,
-  assigned_to text
+  assigned_to text,
+  claim_employee_id text,
+  claim_employee_name text,
+  claim_claimed_at timestamptz
 )
 language plpgsql security definer set search_path=public,pg_temp as $$
 declare
@@ -34,8 +38,11 @@ begin
     or nullif(trim(coalesce(f->>'details','')),'') is not null or nullif(trim(coalesce(f->>'notes','')),'') is not null;
   if not has_filters then return; end if;
   return query
-  select c.id,c.name,c.source_names,c.source,c.notes,c.tags,c.address,c.created_at,c.assigned_to
+  select c.id,c.name,c.source_names,c.source,c.notes,c.tags,c.address,c.created_at,c.assigned_to,
+    active_claim.employee_id,rep.full_name,active_claim.claimed_at
   from public.clients c
+  left join public.client_claims active_claim on active_claim.client_id=c.id and active_claim.released_at is null
+  left join public.profiles rep on rep.id=active_claim.employee_id
   where c.deleted_at is null
     and (client_query is null or concat_ws(' ',c.name,array_to_string(c.source_names,' '),c.source,c.notes,c.tags::text,c.address::text) ilike '%'||client_query||'%')
     and (nullif(trim(coalesce(f->>'governorate','')),'') is null or coalesce(c.address->>'governorate','') ilike '%'||trim(f->>'governorate')||'%')
